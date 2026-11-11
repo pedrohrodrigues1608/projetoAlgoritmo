@@ -1,61 +1,107 @@
-import copy
-from produto import Produto
+        )
 
+    def repor_estoque(self, codigo, unidades):
+        indice = self._indice_do_produto(codigo)
+        if indice == -1:
+            return f"ERRO: produto de código {codigo} não encontrado."
 
-class Padaria:
-    MAX_PRODUTOS = 20
+        if not self._quantidade_inteira_positiva(unidades):
+            return "ERRO: a quantidade para reposição deve ser maior que zero."
 
-    def __init__(self, nome="Padaria"):
-        self._nome = nome
-        self._produtos = []
+        produto = self._produtos[indice]
+        produto.adicionar_estoque(unidades)
+        self._registrar_no_historico(
+            f"Reposição: {unidades} unidade(s) de {produto.get_nome()}"
+        )
+        return (
+            f"OK: estoque de {produto.get_nome()} agora é "
+            f"{produto.get_quantidade()}."
+        )
 
-    def cadastrar_produto(self, nome, preco, quantidade=0, categoria="Geral"):
-        # RN01 - Limite maximo de produtos
-        if len(self._produtos) >= Padaria.MAX_PRODUTOS:
-            print(f"Erro (RN01): limite maximo de {Padaria.MAX_PRODUTOS} produtos atingido.")
-            return False
+    def alterar_preco(self, codigo, novo_preco):
+        indice = self._indice_do_produto(codigo)
+        if indice == -1:
+            return f"ERRO: produto de código {codigo} não encontrado."
 
-        # RN02 - Nome obrigatorio e unico
-        if not nome or not str(nome).strip():
-            print("Erro (RN02): o nome do produto nao pode ser vazio.")
-            return False
+        if not self._numero_positivo(novo_preco):
+            return "ERRO: o preço deve ser maior que zero."
 
-        nome_limpo = str(nome).strip()
-        for p in self._produtos:
-            if p.get_nome().lower() == nome_limpo.lower():
-                print(f"Erro (RN02): ja existe um produto cadastrado com o nome '{nome_limpo}'.")
-                return False
+        produto = self._produtos[indice]
+        produto.set_preco(novo_preco)
+        self._registrar_no_historico(
+            f"Alteração de preço: {produto.get_nome()} "
+            f"para R$ {float(novo_preco):.2f}"
+        )
+        return f"OK: preço de {produto.get_nome()} alterado para R$ {float(novo_preco):.2f}."
 
-        # RN03 - Preco maior que zero
-        if preco <= 0:
-            print("Erro (RN03): o preco do produto deve ser maior que zero.")
-            return False
+    def get_vendas(self, posicao_produto, dia):
+        """Retorna uma célula da matriz; posição do produto começa em zero."""
+        if (not isinstance(posicao_produto, int)
+                or isinstance(posicao_produto, bool)
+                or not 0 <= posicao_produto < len(self._produtos)
+                or not self._dia_valido(dia)):
+            return 0
+        return self._vendas[posicao_produto][dia - 1]
 
-        # RN04 - Quantidade inicial nao pode ser negativa
-        if quantidade < 0:
-            print("Erro (RN04): a quantidade inicial nao pode ser negativa.")
-            return False
+    def total_vendido_do_produto(self, posicao_produto):
+        """Soma uma linha da matriz (todas as vendas de um produto)."""
+        if (not isinstance(posicao_produto, int)
+                or isinstance(posicao_produto, bool)
+                or not 0 <= posicao_produto < len(self._produtos)):
+            return 0
+        return sum(self._vendas[posicao_produto])
 
-        novo = Produto(nome_limpo, preco, quantidade, categoria)
-        self._produtos.append(novo)
-        return True
+    def total_vendido_no_dia(self, dia):
+        """Soma uma coluna da matriz (vendas de todos os produtos no dia)."""
+        if not self._dia_valido(dia):
+            return 0
+        coluna = dia - 1
+        return sum(linha[coluna] for linha in self._vendas[:len(self._produtos)])
 
-    def buscar_por_codigo(self, codigo):
-        for p in self._produtos:
-            if p.get_codigo() == codigo:
-                return p
-        return None
+    def get_faturamento_do_dia(self, dia):
+        if not self._dia_valido(dia):
+            return 0.0
+        return self._faturamento_por_dia[dia - 1]
 
-    def buscar_por_nome(self, termo):
-        if not termo:
-            return []
-        termo_busca = str(termo).strip().lower()
-        resultado = []
-        for p in self._produtos:
-            if termo_busca in p.get_nome().lower():
-                resultado.append(p)
-        return resultado
+    def get_faturamento_total(self):
+        return sum(self._faturamento_por_dia)
 
-    def get_produtos(self):
-        # Retorna copia para nao alterar a lista original por fora
-        return copy.copy(self._produtos)
+    def produto_mais_vendido(self):
+        """Retorna o Produto com maior total semanal; None se não houve vendas."""
+        if not self._produtos:
+            return None
+        totais = [
+            self.total_vendido_do_produto(i)
+            for i in range(len(self._produtos))
+        ]
+        maior = max(totais, default=0)
+        if maior == 0:
+            return None
+        return self._produtos[totais.index(maior)]
+
+    def dia_de_maior_faturamento(self):
+        """Retorna o dia de 1 a 7; retorna 0 se ainda não houve faturamento."""
+        maior = max(self._faturamento_por_dia, default=0.0)
+        if maior <= 0:
+            return 0
+        return self._faturamento_por_dia.index(maior) + 1
+
+    def produtos_com_estoque_baixo(self):
+        return [
+            produto for produto in self._produtos
+            if produto.estoque_baixo(self.LIMITE_ESTOQUE_BAIXO)
+        ]
+
+    def valor_total_em_estoque(self):
+        return sum(produto.valor_em_estoque() for produto in self._produtos)
+
+    def get_historico(self):
+        return self._historico.copy()
+
+    # Métodos extras de leitura para facilitar os relatórios da Pessoa 3.
+    def get_dias(self):
+        return self.DIAS
+
+    def get_matriz_vendas(self):
+        """Devolve uma cópia das linhas utilizadas da matriz."""
+        return [linha.copy() for linha in self._vendas[:len(self._produtos)]]
