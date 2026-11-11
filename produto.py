@@ -1,16 +1,31 @@
 class Produto:
-    """Representa um produto da padaria e protege seus dados por meio de métodos."""
+    """Produto da padaria: protege os dados e valida preço e estoque."""
 
-    proximo_codigo = 1
+    _proximo_codigo = 1
 
     def __init__(self, nome, preco, quantidade=0, categoria="Geral"):
-        self._codigo = Produto.proximo_codigo
-        Produto.proximo_codigo += 1
+        self._codigo = Produto._proximo_codigo
+        Produto._proximo_codigo += 1
 
         self._nome = str(nome).strip()
-        self._categoria = str(categoria).strip() if categoria and str(categoria).strip() else "Sem categoria"
-        self._preco = float(preco) if isinstance(preco, (int, float)) and not isinstance(preco, bool) and preco > 0 else 0.0
-        self._quantidade = int(quantidade) if isinstance(quantidade, int) and not isinstance(quantidade, bool) and quantidade >= 0 else 0
+        categoria = str(categoria).strip() if categoria else ""
+        self._categoria = categoria or "Sem categoria"
+        # Preço inválido fica 0 e quantidade negativa vira 0.
+        self._preco = float(preco) if self._numero_positivo(preco) else 0.0
+        self._quantidade = (
+            quantidade if self._inteiro(quantidade) and quantidade >= 0 else 0
+        )
+
+    @staticmethod
+    def _inteiro(valor):
+        # bool é subclasse de int em Python, então é preciso excluí-lo.
+        return isinstance(valor, int) and not isinstance(valor, bool)
+
+    @staticmethod
+    def _numero_positivo(valor):
+        return (isinstance(valor, (int, float))
+                and not isinstance(valor, bool)
+                and valor > 0)
 
     # Getters: permitem consultar os atributos sem alterá-los diretamente.
     def get_codigo(self):
@@ -29,24 +44,19 @@ class Produto:
         return self._quantidade
 
     def set_preco(self, novo_preco):
-        if (not isinstance(novo_preco, (int, float))
-                or isinstance(novo_preco, bool)
-                or novo_preco <= 0):
+        if not self._numero_positivo(novo_preco):
             return False
         self._preco = float(novo_preco)
         return True
 
     def adicionar_estoque(self, quantidade):
-        if (not isinstance(quantidade, int)
-                or isinstance(quantidade, bool)
-                or quantidade <= 0):
+        if not self._inteiro(quantidade) or quantidade <= 0:
             return False
         self._quantidade += quantidade
         return True
 
     def remover_estoque(self, quantidade):
-        if (not isinstance(quantidade, int)
-                or isinstance(quantidade, bool)
+        if (not self._inteiro(quantidade)
                 or quantidade <= 0
                 or quantidade > self._quantidade):
             return False
