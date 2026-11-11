@@ -1,8 +1,45 @@
+import math
+
+import relatorio
 from padaria import Padaria
 
 
+# ------------------------------------------------------------ leitura segura
+def ler_inteiro(mensagem):
+    """Lê um inteiro; se o usuário digitar algo inválido, pergunta de novo."""
+    while True:
+        texto = input(mensagem).strip()
+        try:
+            return int(texto)
+        except ValueError:
+            print("Valor inválido: digite um número inteiro.")
+
+
+def ler_decimal(mensagem):
+    """Lê um decimal; aceita vírgula ou ponto (5,50 ou 5.50)."""
+    while True:
+        texto = input(mensagem).strip().replace(",", ".")
+        try:
+            valor = float(texto)
+            if math.isfinite(valor):  # recusa "nan" e "inf"
+                return valor
+        except ValueError:
+            pass
+        print("Valor inválido: digite um número, como 5,50.")
+
+
+def ler_texto(mensagem):
+    """Lê um texto que não pode ficar vazio."""
+    while True:
+        texto = input(mensagem).strip()
+        if texto:
+            return texto
+        print("Este campo não pode ficar vazio.")
+
+
+# -------------------------------------------------------------- dados iniciais
 def carregar_dados_iniciais(padaria):
-    """Dados dos Quadros 11 e 12 do enunciado original."""
+    """Quadros 11 e 12 do enunciado: 5 produtos e 8 vendas, nessa ordem."""
     produtos = [
         ("Pão francês", "Pães", 0.75, 200),
         ("Pão de queijo", "Salgados", 4.50, 60),
@@ -10,62 +47,101 @@ def carregar_dados_iniciais(padaria):
         ("Sonho", "Doces", 6.00, 25),
         ("Café coado", "Bebidas", 5.00, 80),
     ]
-
     for nome, categoria, preco, quantidade in produtos:
-        print(padaria.cadastrar_produto(nome, preco, quantidade, categoria))
+        padaria.cadastrar_produto(nome, preco, quantidade, categoria)
 
     vendas = [
         (1, 120, 1), (2, 15, 1), (5, 30, 1),
         (1, 60, 2), (3, 2, 2),
         (4, 10, 3), (2, 20, 3), (5, 25, 3),
     ]
-
     for codigo, unidades, dia in vendas:
-        print(padaria.registrar_venda(codigo, unidades, dia))
+        padaria.registrar_venda(codigo, unidades, dia)
 
 
-def mostrar_resumo(padaria):
-    print("\n--- RESUMO DA PARTE 2 ---")
-    for dia, nome in enumerate(padaria.get_dias(), start=1):
-        print(
-            f"{nome}: {padaria.total_vendido_no_dia(dia)} unidades | "
-            f"R$ {padaria.get_faturamento_do_dia(dia):.2f}"
-        )
+# ------------------------------------------------------------------------ menu
+def mostrar_menu():
+    print()
+    print("===== PADARIA PÃO QUENTE =====")
+    print(" 1 - Cadastrar produto")
+    print(" 2 - Listar estoque")
+    print(" 3 - Registrar venda")
+    print(" 4 - Repor estoque")
+    print(" 5 - Alterar preço")
+    print(" 6 - Buscar produto por nome")
+    print(" 7 - Relatório de vendas da semana")
+    print(" 8 - Produtos com estoque baixo")
+    print(" 9 - Fechamento")
+    print("10 - Histórico de operações")
+    print(" 0 - Sair")
 
-    mais_vendido = padaria.produto_mais_vendido()
-    if mais_vendido:
-        print(
-            f"Produto mais vendido: {mais_vendido.get_nome()} "
-            f"({padaria.total_vendido_do_produto(
-                padaria.get_produtos().index(mais_vendido)
-            )} unidades)"
-        )
-    else:
-        print("Produto mais vendido: ainda não houve vendas.")
 
-    dia_maior = padaria.dia_de_maior_faturamento()
-    print(
-        "Dia de maior faturamento:",
-        padaria.get_dias()[dia_maior - 1] if dia_maior else "Sem vendas"
-    )
-    print(f"Faturamento total: R$ {padaria.get_faturamento_total():.2f}")
-    print(f"Valor em estoque: R$ {padaria.valor_total_em_estoque():.2f}")
+def cadastrar_produto(padaria):
+    print("--- Cadastro de produto ---")
+    nome = ler_texto("Nome: ")
+    categoria = input("Categoria: ").strip()  # pode ficar vazia
+    preco = ler_decimal("Preço (R$): ")
+    quantidade = ler_inteiro("Quantidade inicial: ")
+    print(padaria.cadastrar_produto(nome, preco, quantidade, categoria))
 
-    baixos = padaria.produtos_com_estoque_baixo()
-    print("Estoque baixo:", ", ".join(p.get_nome() for p in baixos) if baixos else "Nenhum")
+
+def registrar_venda(padaria):
+    print("--- Registro de venda ---")
+    codigo = ler_inteiro("Código do produto: ")
+    unidades = ler_inteiro("Quantidade vendida: ")
+    dia = ler_inteiro("Dia (1-Seg 2-Ter 3-Qua 4-Qui 5-Sex 6-Sáb 7-Dom): ")
+    print(padaria.registrar_venda(codigo, unidades, dia))
+
+
+def repor_estoque(padaria):
+    print("--- Reposição de estoque ---")
+    codigo = ler_inteiro("Código do produto: ")
+    unidades = ler_inteiro("Unidades a repor: ")
+    print(padaria.repor_estoque(codigo, unidades))
+
+
+def alterar_preco(padaria):
+    print("--- Alteração de preço ---")
+    codigo = ler_inteiro("Código do produto: ")
+    novo_preco = ler_decimal("Novo preço (R$): ")
+    print(padaria.alterar_preco(codigo, novo_preco))
+
+
+def buscar_produto(padaria):
+    print("--- Busca por nome ---")
+    trecho = ler_texto("Parte do nome: ")
+    relatorio.imprimir_resultado_busca(padaria.buscar_por_nome(trecho), trecho)
+
+
+def main():
+    padaria = Padaria("Padaria Pão Quente")
+    carregar_dados_iniciais(padaria)
+
+    acoes = {
+        1: cadastrar_produto,
+        2: relatorio.imprimir_estoque,
+        3: registrar_venda,
+        4: repor_estoque,
+        5: alterar_preco,
+        6: buscar_produto,
+        7: relatorio.imprimir_vendas_da_semana,
+        8: relatorio.imprimir_estoque_baixo,
+        9: relatorio.imprimir_fechamento,
+        10: relatorio.imprimir_historico,
+    }
+
+    opcao = -1
+    while opcao != 0:
+        mostrar_menu()
+        opcao = ler_inteiro("Escolha uma opção: ")
+        if opcao == 0:
+            relatorio.imprimir_fechamento(padaria)
+            print("Até logo!")
+        elif opcao in acoes:
+            acoes[opcao](padaria)
+        else:
+            print("Opção inválida. Digite um número de 0 a 10.")
 
 
 if __name__ == "__main__":
-    padaria = Padaria("Padaria Pão Quente")
-    carregar_dados_iniciais(padaria)
-    mostrar_resumo(padaria)
-
-    print("\n--- TESTES ADICIONAIS ---")
-    print(padaria.registrar_venda(3, 5, 4))  # deve recusar: estoque insuficiente
-    print(padaria.registrar_venda(1, 10, 4))  # deve aceitar
-    print(padaria.repor_estoque(3, 12))
-    print(padaria.alterar_preco(1, 0.80))
-
-    print("\n--- HISTÓRICO ---")
-    for operacao in padaria.get_historico():
-        print(operacao)
+    main()
