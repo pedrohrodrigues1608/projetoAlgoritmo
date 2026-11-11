@@ -1,4 +1,4 @@
- from produto import Produto
+from produto import Produto
 
 
 def formatar_moeda(valor):
