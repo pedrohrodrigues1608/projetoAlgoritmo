@@ -1,62 +1,139 @@
+ from produto import Produto
+
+
+def formatar_moeda(valor):
+    """Formata em reais com vírgula decimal, por exemplo R$ 7,50."""
+    texto = f"{valor:,.2f}"
+    texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {texto}"
+
+
+class Padaria:
+    """Regras de negócio e armazenamento: lista, matriz, vetor e histórico."""
+
+    MAX_PRODUTOS = 20
+    LIMITE_ESTOQUE_BAIXO = 5
+    DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+    def __init__(self, nome):
+        self._nome = nome
+        self._produtos = []
+        self._historico = []
+        # Matriz fixa 20 x 7: a linha é a posição do produto e a coluna é o
+        # dia (0 a 6). Por isso o acesso é sempre vendas[i][dia - 1].
+        self._vendas = [[0] * 7 for _ in range(self.MAX_PRODUTOS)]
+        self._faturamento_por_dia = [0.0] * 7
+
+    def get_nome(self):
+        return self._nome
+
+    # ---------------------------------------------------------------- produtos
+    def cadastrar_produto(self, nome, preco, quantidade, categoria=""):
+        nome = str(nome).strip()
+        if not nome:
+            return "ERRO: o nome não pode ficar vazio."
+        if self._existe_produto_com_nome(nome):
+            return f"ERRO: já existe um produto chamado {nome}."
+        if not self._numero_positivo(preco):
+            return "ERRO: o preço deve ser maior que zero."
+        if not self._inteiro(quantidade) or quantidade < 0:
+            return "ERRO: a quantidade inicial não pode ser negativa."
+        if len(self._produtos) >= self.MAX_PRODUTOS:
+            return f"ERRO: limite de {self.MAX_PRODUTOS} produtos atingido."
+
+        categoria = str(categoria).strip() or "Sem categoria"
+        produto = Produto(nome, preco, quantidade, categoria)
+        self._produtos.append(produto)
+        self._registrar_no_historico(
+            f"Cadastro: {nome} ({categoria}) a {formatar_moeda(preco)}, "
+            f"{quantidade} un."
         )
+        return f"OK: produto cadastrado com o código {produto.get_codigo()}."
+
+    def buscar_por_codigo(self, codigo):
+        indice = self._indice_do_produto(codigo)
+        return None if indice == -1 else self._produtos[indice]
+
+    def buscar_por_nome(self, trecho):
+        busca = str(trecho).strip().lower()
+        return [p for p in self._produtos if busca in p.get_nome().lower()]
+
+    def get_produtos(self):
+        """Devolve uma CÓPIA da lista."""
+        return self._produtos.copy()
+
+    def get_quantidade_de_produtos(self):
+        return len(self._produtos)
+
+    # ------------------------------------------------------------------ vendas
+    def registrar_venda(self, codigo, unidades, dia):
+        # Valida tudo antes de alterar qualquer dado (venda recusada não muda nada).
+        indice = self._indice_do_produto(codigo)
+        if indice == -1:
+            return f"ERRO: produto de código {codigo} não encontrado."
+        if not self._quantidade_inteira_positiva(unidades):
+            return "ERRO: a quantidade vendida deve ser maior que zero."
+        if not self._dia_valido(dia):
+            return "ERRO: dia inválido. Use um número de 1 (Seg) a 7 (Dom)."
+        produto = self._produtos[indice]
+        if unidades > produto.get_quantidade():
+            return (f"ERRO: estoque insuficiente. "
+                    f"Disponível: {produto.get_quantidade()} unidade(s).")
+
+        produto.remover_estoque(unidades)
+        total = unidades * produto.get_preco()  # valor guardado na hora da venda
+        self._vendas[indice][dia - 1] += unidades
+        self._faturamento_por_dia[dia - 1] += total
+        self._registrar_no_historico(
+            f"Venda: {unidades} x {produto.get_nome()} "
+            f"({self.DIAS[dia - 1]}) = {formatar_moeda(total)}"
+        )
+        return (f"OK: venda registrada. Total: {formatar_moeda(total)}. "
+                f"Estoque restante: {produto.get_quantidade()}.")
 
     def repor_estoque(self, codigo, unidades):
-        indice = self._indice_do_produto(codigo)
-        if indice == -1:
+        produto = self.buscar_por_codigo(codigo)
+        if produto is None:
             return f"ERRO: produto de código {codigo} não encontrado."
-
         if not self._quantidade_inteira_positiva(unidades):
             return "ERRO: a quantidade para reposição deve ser maior que zero."
-
-        produto = self._produtos[indice]
         produto.adicionar_estoque(unidades)
-        self._registrar_no_historico(
-            f"Reposição: {unidades} unidade(s) de {produto.get_nome()}"
-        )
-        return (
-            f"OK: estoque de {produto.get_nome()} agora é "
-            f"{produto.get_quantidade()}."
-        )
+        self._registrar_no_historico(f"Reposição: {unidades} x {produto.get_nome()}")
+        return (f"OK: estoque de {produto.get_nome()} agora é "
+                f"{produto.get_quantidade()}.")
 
     def alterar_preco(self, codigo, novo_preco):
-        indice = self._indice_do_produto(codigo)
-        if indice == -1:
+        produto = self.buscar_por_codigo(codigo)
+        if produto is None:
             return f"ERRO: produto de código {codigo} não encontrado."
-
         if not self._numero_positivo(novo_preco):
             return "ERRO: o preço deve ser maior que zero."
-
-        produto = self._produtos[indice]
         produto.set_preco(novo_preco)
+        # O faturamento já está no vetor, então vendas passadas não mudam.
         self._registrar_no_historico(
-            f"Alteração de preço: {produto.get_nome()} "
-            f"para R$ {float(novo_preco):.2f}"
+            f"Preço: {produto.get_nome()} passou a {formatar_moeda(novo_preco)}"
         )
-        return f"OK: preço de {produto.get_nome()} alterado para R$ {float(novo_preco):.2f}."
+        return (f"OK: preço de {produto.get_nome()} alterado para "
+                f"{formatar_moeda(novo_preco)}.")
 
+    # ---------------------------------------------------------------- consultas
     def get_vendas(self, posicao_produto, dia):
-        """Retorna uma célula da matriz; posição do produto começa em zero."""
-        if (not isinstance(posicao_produto, int)
-                or isinstance(posicao_produto, bool)
-                or not 0 <= posicao_produto < len(self._produtos)
-                or not self._dia_valido(dia)):
+        """Célula da matriz; posição do produto começa em 0 e o dia vai de 1 a 7."""
+        if not 0 <= posicao_produto < len(self._produtos) or not self._dia_valido(dia):
             return 0
         return self._vendas[posicao_produto][dia - 1]
 
     def total_vendido_do_produto(self, posicao_produto):
-        """Soma uma linha da matriz (todas as vendas de um produto)."""
-        if (not isinstance(posicao_produto, int)
-                or isinstance(posicao_produto, bool)
-                or not 0 <= posicao_produto < len(self._produtos)):
+        """Soma de uma LINHA da matriz."""
+        if not 0 <= posicao_produto < len(self._produtos):
             return 0
         return sum(self._vendas[posicao_produto])
 
     def total_vendido_no_dia(self, dia):
-        """Soma uma coluna da matriz (vendas de todos os produtos no dia)."""
+        """Soma de uma COLUNA da matriz (só as linhas em uso)."""
         if not self._dia_valido(dia):
             return 0
-        coluna = dia - 1
-        return sum(linha[coluna] for linha in self._vendas[:len(self._produtos)])
+        return sum(self._vendas[i][dia - 1] for i in range(len(self._produtos)))
 
     def get_faturamento_do_dia(self, dia):
         if not self._dia_valido(dia):
@@ -67,41 +144,62 @@
         return sum(self._faturamento_por_dia)
 
     def produto_mais_vendido(self):
-        """Retorna o Produto com maior total semanal; None se não houve vendas."""
-        if not self._produtos:
-            return None
-        totais = [
-            self.total_vendido_do_produto(i)
-            for i in range(len(self._produtos))
-        ]
-        maior = max(totais, default=0)
-        if maior == 0:
-            return None
-        return self._produtos[totais.index(maior)]
+        """Produto com mais unidades na semana; None se não houve vendas."""
+        melhor, melhor_total = None, 0
+        for i, produto in enumerate(self._produtos):
+            total = self.total_vendido_do_produto(i)
+            if total > melhor_total:
+                melhor, melhor_total = produto, total
+        return melhor
 
     def dia_de_maior_faturamento(self):
-        """Retorna o dia de 1 a 7; retorna 0 se ainda não houve faturamento."""
-        maior = max(self._faturamento_por_dia, default=0.0)
-        if maior <= 0:
-            return 0
-        return self._faturamento_por_dia.index(maior) + 1
+        """Dia de 1 a 7; 0 se não houve vendas."""
+        melhor_dia, melhor_valor = 0, 0.0
+        for dia in range(1, 8):
+            if self._faturamento_por_dia[dia - 1] > melhor_valor:
+                melhor_dia = dia
+                melhor_valor = self._faturamento_por_dia[dia - 1]
+        return melhor_dia
 
     def produtos_com_estoque_baixo(self):
-        return [
-            produto for produto in self._produtos
-            if produto.estoque_baixo(self.LIMITE_ESTOQUE_BAIXO)
-        ]
+        return [p for p in self._produtos
+                if p.estoque_baixo(self.LIMITE_ESTOQUE_BAIXO)]
 
     def valor_total_em_estoque(self):
-        return sum(produto.valor_em_estoque() for produto in self._produtos)
+        return sum(p.valor_em_estoque() for p in self._produtos)
 
     def get_historico(self):
+        """Devolve uma CÓPIA do histórico."""
         return self._historico.copy()
 
-    # Métodos extras de leitura para facilitar os relatórios da Pessoa 3.
     def get_dias(self):
         return self.DIAS
 
-    def get_matriz_vendas(self):
-        """Devolve uma cópia das linhas utilizadas da matriz."""
-        return [linha.copy() for linha in self._vendas[:len(self._produtos)]]
+    # --------------------------------------------------------------- auxiliares
+    def _indice_do_produto(self, codigo):
+        for i, produto in enumerate(self._produtos):
+            if produto.get_codigo() == codigo:
+                return i
+        return -1
+
+    def _existe_produto_com_nome(self, nome):
+        return any(p.get_nome().lower() == nome.strip().lower() for p in self._produtos)
+
+    def _dia_valido(self, dia):
+        return self._inteiro(dia) and 1 <= dia <= 7
+
+    @staticmethod
+    def _inteiro(valor):
+        # bool é subclasse de int em Python, então é preciso excluí-lo.
+        return isinstance(valor, int) and not isinstance(valor, bool)
+
+    def _quantidade_inteira_positiva(self, valor):
+        return self._inteiro(valor) and valor > 0
+
+    @staticmethod
+    def _numero_positivo(valor):
+        return (isinstance(valor, (int, float)) and not isinstance(valor, bool)
+                and valor > 0)
+
+    def _registrar_no_historico(self, descricao):
+        self._historico.append(f"{len(self._historico) + 1:03d} | {descricao}")
