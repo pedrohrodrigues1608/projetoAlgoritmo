@@ -1,182 +1,123 @@
+"""Testes automatizados correspondentes aos cenários T01 a T15 da seção 9.
 
+Execute na pasta do projeto com: python -m unittest -v testes.py
+"""
+
+import contextlib
+import io
 import unittest
+from unittest.mock import patch
 
+import main
+import relatorio
 from padaria import Padaria
+from produto import Produto
 
 
-class TestesPadaria(unittest.TestCase):
-
+class TestesSecao9(unittest.TestCase):
     def setUp(self):
+        # Os códigos são sequenciais durante a execução real. Reiniciamos apenas
+        # entre cenários isolados para que cada teste comece com códigos 1 a 5.
+        Produto._proximo_codigo = 1
         self.padaria = Padaria("Padaria Pão Quente")
+        main.carregar_dados_iniciais(self.padaria)
 
-        self.padaria.cadastrar_produto(
-            "Pão francês", 0.75, 200, "Pães"
-        )
-        self.padaria.cadastrar_produto(
-            "Pão de queijo", 4.50, 60, "Salgados"
-        )
-        self.padaria.cadastrar_produto(
-            "Bolo de cenoura", 28.00, 6, "Doces"
-        )
+    def test_T01_listar_estoque_inicial(self):
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            relatorio.imprimir_estoque(self.padaria)
+        self.assertIn("Pão francês", saida.getvalue())
+        self.assertIn("R$ 454,50", saida.getvalue())
+        self.assertEqual(self.padaria.get_quantidade_de_produtos(), 5)
 
-        self.codigo_pao = self.padaria.get_produtos()[0].get_codigo()
-        self.codigo_queijo = self.padaria.get_produtos()[1].get_codigo()
-        self.codigo_bolo = self.padaria.get_produtos()[2].get_codigo()
+    def test_T02_cadastrar_produto_e_tratar_preco_digitado_invalido(self):
+        with patch("builtins.input", side_effect=["abc", "3,50"]):
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                preco = main.ler_decimal("Preço: ")
+        self.assertEqual(preco, 3.5)
+        self.assertIn("Valor inválido", saida.getvalue())
+        resposta = self.padaria.cadastrar_produto("Broa de milho", preco, 40, "Pães")
+        self.assertIn("OK:", resposta)
+        self.assertIn("código 6", resposta)
 
-    # T01 - Cadastro de produto válido
-    def test_T01_cadastrar_produto(self):
-        resultado = self.padaria.cadastrar_produto(
-            "Café", 5.00, 30, "Bebidas"
-        )
-        self.assertIn("OK", resultado)
-        self.assertEqual(
-            self.padaria.get_quantidade_de_produtos(), 4
-        )
+    def test_T03_impedir_nome_duplicado_sem_diferenciar_maiusculas(self):
+        resposta = self.padaria.cadastrar_produto("pão francês", 2.0, 10, "Pães")
+        self.assertTrue(resposta.startswith("ERRO:"))
 
-    # T02 - Impedir cadastro com nome vazio
-    def test_T02_nome_vazio(self):
-        resultado = self.padaria.cadastrar_produto(
-            "", 5.00, 10, "Bebidas"
-        )
-        self.assertIn("ERRO", resultado)
+    def test_T04_impedir_preco_zero(self):
+        resposta = self.padaria.cadastrar_produto("Rosca", 0, 10, "Pães")
+        self.assertTrue(resposta.startswith("ERRO:"))
 
-    # T03 - Impedir produto duplicado
-    def test_T03_produto_duplicado(self):
-        resultado = self.padaria.cadastrar_produto(
-            "Pão francês", 1.00, 10, "Pães"
-        )
-        self.assertIn("ERRO", resultado)
+    def test_T05_rejeitar_venda_sem_estoque_e_sem_alterar_dados(self):
+        estoque_antes = self.padaria.buscar_por_codigo(3).get_quantidade()
+        faturamento_antes = self.padaria.get_faturamento_total()
+        resposta = self.padaria.registrar_venda(3, 5, 4)
+        self.assertIn("Disponível: 4", resposta)
+        self.assertEqual(self.padaria.buscar_por_codigo(3).get_quantidade(), estoque_antes)
+        self.assertEqual(self.padaria.get_faturamento_total(), faturamento_antes)
 
-    # T04 - Impedir preço ou quantidade inválidos
-    def test_T04_dados_invalidos(self):
-        preco = self.padaria.cadastrar_produto(
-            "Produto A", -2, 10, "Geral"
-        )
-        quantidade = self.padaria.cadastrar_produto(
-            "Produto B", 2.00, -5, "Geral"
-        )
+    def test_T06_registrar_venda_valida(self):
+        resposta = self.padaria.registrar_venda(1, 10, 4)
+        self.assertIn("OK:", resposta)
+        self.assertIn("R$ 7,50", resposta)
+        self.assertEqual(self.padaria.buscar_por_codigo(1).get_quantidade(), 10)
 
-        self.assertIn("ERRO", preco)
-        self.assertIn("ERRO", quantidade)
+    def test_T07_rejeitar_dia_invalido(self):
+        self.assertTrue(self.padaria.registrar_venda(2, 1, 8).startswith("ERRO:"))
 
-    # T05 - Venda recusada por estoque insuficiente
-    def test_T05_estoque_insuficiente(self):
-        resultado = self.padaria.registrar_venda(
-            self.codigo_bolo, 10, 4
-        )
-        self.assertIn("estoque insuficiente", resultado)
+    def test_T08_rejeitar_codigo_inexistente(self):
+        self.assertTrue(self.padaria.registrar_venda(99, 1, 1).startswith("ERRO:"))
 
-    # T06 - Registrar venda válida
-    def test_T06_venda_valida(self):
-        resultado = self.padaria.registrar_venda(
-            self.codigo_pao, 10, 4
-        )
+    def test_T09_entrada_inteira_invalida_nao_encerrar_programa(self):
+        with patch("builtins.input", side_effect=["x", "99"]):
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                valor = main.ler_inteiro("Opção: ")
+        self.assertEqual(valor, 99)
+        self.assertIn("Valor inválido", saida.getvalue())
 
-        produto = self.padaria.buscar_por_codigo(self.codigo_pao)
-
-        self.assertIn("OK", resultado)
-        self.assertEqual(produto.get_quantidade(), 190)
-        self.assertEqual(
-            self.padaria.get_vendas(0, 4), 10
-        )
-
-    # T07 - Impedir dia inválido
-    def test_T07_dia_invalido(self):
-        resultado = self.padaria.registrar_venda(
-            self.codigo_pao, 1, 8
-        )
-        self.assertIn("ERRO", resultado)
-
-    # T08 - Impedir código inexistente
-    def test_T08_codigo_inexistente(self):
-        resultado = self.padaria.registrar_venda(
-            9999, 1, 1
-        )
-        self.assertIn("não encontrado", resultado)
-
-    # T09 - Impedir quantidade inválida na venda
-    def test_T09_quantidade_invalida(self):
-        resultado = self.padaria.registrar_venda(
-            self.codigo_pao, 0, 1
-        )
-        self.assertIn("ERRO", resultado)
-
-    # T10 - Reposição de estoque
     def test_T10_repor_estoque(self):
-        resultado = self.padaria.repor_estoque(
-            self.codigo_bolo, 12
-        )
+        resposta = self.padaria.repor_estoque(3, 12)
+        self.assertIn("OK:", resposta)
+        self.assertEqual(self.padaria.buscar_por_codigo(3).get_quantidade(), 16)
 
-        produto = self.padaria.buscar_por_codigo(self.codigo_bolo)
+    def test_T11_impedir_preco_negativo(self):
+        self.assertTrue(self.padaria.alterar_preco(1, -2).startswith("ERRO:"))
 
-        self.assertIn("OK", resultado)
-        self.assertEqual(produto.get_quantidade(), 18)
-
-    # T11 - Impedir alteração para preço negativo
-    def test_T11_preco_invalido(self):
-        resultado = self.padaria.alterar_preco(
-            self.codigo_pao, -2
-        )
-        self.assertIn("ERRO", resultado)
-
-    # T12 - Busca por parte do nome
-    def test_T12_busca_por_nome(self):
+    def test_T12_buscar_por_nome_parcial(self):
         encontrados = self.padaria.buscar_por_nome("pão")
+        self.assertEqual([p.get_nome() for p in encontrados],
+                         ["Pão francês", "Pão de queijo"])
 
-        self.assertEqual(len(encontrados), 2)
+    def test_T13_relatorio_sem_estoque_baixo_apos_reposicao(self):
+        self.padaria.repor_estoque(3, 12)
+        self.assertEqual(self.padaria.produtos_com_estoque_baixo(), [])
 
-    # T13 - Identificar produtos com estoque baixo
-    def test_T13_estoque_baixo(self):
-        self.padaria.buscar_por_codigo(
-            self.codigo_bolo
-        ).remover_estoque(2)
+    def test_T14_relatorio_matriz_apos_venda_adicional(self):
+        self.padaria.registrar_venda(1, 10, 4)
+        total_unidades = sum(
+            self.padaria.total_vendido_no_dia(dia) for dia in range(1, 8)
+        )
+        self.assertEqual(total_unidades, 292)
+        self.assertEqual(self.padaria.total_vendido_no_dia(4), 10)
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            relatorio.imprimir_vendas_da_semana(self.padaria)
+        self.assertIn("Total de unidades vendidas na semana: 292", saida.getvalue())
 
-        produtos = self.padaria.produtos_com_estoque_baixo()
-
-        self.assertIn(
-            self.codigo_bolo,
-            [p.get_codigo() for p in produtos]
-        )
-
-    # T14 - Conferir matriz de vendas e faturamento
-    def test_T14_relatorio_vendas(self):
-        self.padaria.registrar_venda(
-            self.codigo_pao, 10, 4
-        )
-        self.padaria.registrar_venda(
-            self.codigo_queijo, 2, 4
-        )
-
-        self.assertEqual(
-            self.padaria.get_vendas(0, 4), 10
-        )
-        self.assertEqual(
-            self.padaria.get_vendas(1, 4), 2
-        )
-        self.assertAlmostEqual(
-            self.padaria.get_faturamento_do_dia(4),
-            16.50
-        )
-
-    # T15 - Conferir fechamento, estoque e histórico
-    def test_T15_fechamento(self):
-        self.padaria.registrar_venda(
-            self.codigo_pao, 10, 1
-        )
-
-        self.assertAlmostEqual(
-            self.padaria.get_faturamento_total(),
-            7.50
-        )
-
-        self.assertEqual(
-            self.padaria.get_produtos()[0].get_quantidade(),
-            190
-        )
-
-        self.assertGreater(
-            len(self.padaria.get_historico()), 0
-        )
+    def test_T15_fechamento_final_do_cenario_completo(self):
+        # Reproduz as operações aceitas do roteiro T02-T14 na ordem da seção 9.
+        self.padaria.cadastrar_produto("Broa de milho", 3.50, 40, "Pães")
+        self.padaria.registrar_venda(1, 10, 4)
+        self.padaria.repor_estoque(3, 12)
+        self.assertAlmostEqual(self.padaria.get_faturamento_total(), 691.00)
+        self.assertAlmostEqual(self.padaria.valor_total_em_estoque(), 923.00)
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            relatorio.imprimir_fechamento(self.padaria)
+        self.assertIn("R$ 691,00", saida.getvalue())
+        self.assertIn("R$ 923,00", saida.getvalue())
 
 
 if __name__ == "__main__":
