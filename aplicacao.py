@@ -1,85 +1,64 @@
-# aplicacao.py
+
+"""Camada de aplicação: menu e integração das classes."""
+
+import main as entrada
+import relatorio
+
 from padaria import Padaria
-from relatorio import (
-    imprimirEstoque,
-    imprimirResultadoBusca,
-    imprimirVendasDaSemana,
-    imprimirEstoqueBaixo,
-    imprimirFechamento,
-    imprimirHistorico,
-)
-
-def ler_int_seguro(msg: str) -> int:
-    # RN09 (leitura segura): como você não colou o Apêndice A, usei validação padrão.
-    while True:
-        s = input(msg).strip()
-        try:
-            return int(s)
-        except ValueError:
-            print("Entrada inválida. Digite um número inteiro.")
 
 
-def carregarDadosIniciais(padaria: Padaria) -> None:
-    """
-    E4 - Quadros 11 e 12 (produtos e vendas padrão).
-    Você ainda não mandou os quadros, então por enquanto carrego só PRODUTOS
-    com base no que já aparece no seu main de teste.
-    """
-    # Produtos padrão (ajuste para seus Quadros 11/12 quando você mandar)
-    padaria.cadastrar_produto("Pão Francês", 0.85, 100, "Panificação")
-    padaria.cadastrar_produto("Pão de Queijo", 3.50, 40, "Salgados")
-    padaria.cadastrar_produto("Bolo de Chocolate", 32.00, 4, "Confeitaria")
+class Aplicacao:
+    """Controla o fluxo do sistema sem duplicar as regras de negócio."""
 
+    def __init__(self):
+        self.padaria = Padaria("Padaria Pão Quente")
+        entrada.carregar_dados_iniciais(self.padaria)
 
-def main():
-    padaria = Padaria()
-    carregarDadosIniciais(padaria)
+    def executar(self):
+        acoes = {
+            1: self.cadastrar_produto,
+            2: lambda: relatorio.imprimir_estoque(self.padaria),
+            3: self.registrar_venda,
+            4: self.repor_estoque,
+            5: self.alterar_preco,
+            6: self.buscar_produto,
+            7: lambda: relatorio.imprimir_vendas_da_semana(self.padaria),
+            8: lambda: relatorio.imprimir_estoque_baixo(self.padaria),
+            9: lambda: relatorio.imprimir_fechamento(self.padaria),
+            10: lambda: relatorio.imprimir_historico(self.padaria),
+        }
 
-    executando = True
-    while executando:  # do-while equivalente
-        print("\n=== MENU PRINCIPAL ===")
-        print("1 - Imprimir estoque")
-        print("2 - Buscar produto (por código ou nome)")
-        print("3 - Imprimir vendas da semana")
-        print("4 - Imprimir estoque baixo")
-        print("5 - Imprimir fechamento")
-        print("6 - Imprimir histórico")
-        print("0 - Sair")
-        print("======================")
+        while True:
+            entrada.mostrar_menu()
+            opcao = entrada.ler_inteiro("Escolha uma opção: ")
 
-        opcao = ler_int_seguro("Escolha uma opção: ")
+            if opcao == 0:
+                relatorio.imprimir_fechamento(self.padaria)
+                print("Até logo!")
+                break
 
-        # switch em Python
-        match opcao:
-            case 0:
-                executando = False
-                print("Encerrando...")
-            case 1:
-                imprimirEstoque(padaria)
-            case 2:
-                sub = ler_int_seguro("Buscar por: 1-Código | 2-Nome : ")
-                if sub == 1:
-                    cod = ler_int_seguro("Digite o código: ")
-                    achado = padaria.buscar_por_codigo(cod)
-                    imprimirResultadoBusca([achado] if achado is not None else [])
-                elif sub == 2:
-                    termo = input("Digite o nome/parcial: ").strip()
-                    encontrados = padaria.buscar_por_nome(termo)
-                    imprimirResultadoBusca(encontrados)
-                else:
-                    print("Opção inválida.")
-            case 3:
-                imprimirVendasDaSemana(padaria)
-            case 4:
-                limite = ler_int_seguro("Defina o limite (estoque baixo): ")
-                imprimirEstoqueBaixo(padaria, limite)
-            case 5:
-                imprimirFechamento(padaria)
-            case 6:
-                imprimirHistorico(padaria)
-            case _:
-                print("Opção inválida. Tente novamente.")
+            acao = acoes.get(opcao)
+
+            if acao is None:
+                print("Opção inválida. Digite um número de 0 a 10.")
+            else:
+                acao()
+
+    def cadastrar_produto(self):
+        entrada.cadastrar_produto(self.padaria)
+
+    def registrar_venda(self):
+        entrada.registrar_venda(self.padaria)
+
+    def repor_estoque(self):
+        entrada.repor_estoque(self.padaria)
+
+    def alterar_preco(self):
+        entrada.alterar_preco(self.padaria)
+
+    def buscar_produto(self):
+        entrada.buscar_produto(self.padaria)
 
 
 if __name__ == "__main__":
-    main()
+    Aplicacao().executar()
